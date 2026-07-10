@@ -15,17 +15,18 @@ import kotlinx.coroutines.launch
 import top.fifthlight.touchcontroller.buildinfo.BuildInfo
 import top.fifthlight.touchcontroller.common.config.GlobalConfig
 import top.fifthlight.touchcontroller.common.config.holder.GlobalConfigHolder
-import top.fifthlight.touchcontroller.common.ui.model.TouchControllerScreenModel
 import top.fifthlight.touchcontroller.common.ui.config.state.ConfigScreenState
+import top.fifthlight.touchcontroller.common.ui.model.TouchControllerScreenModel
 
 val LocalConfigScreenModel = compositionLocalOf<ConfigScreenModel> { error("No ConfigScreenModel") }
 
 class ConfigScreenModel : TouchControllerScreenModel() {
-    private val _uiState = MutableStateFlow(ConfigScreenState(
-	    originalConfig = GlobalConfigHolder.config.value,
-		developmentWarningDialog = developmentWarningDialog,
+    private val _uiState = MutableStateFlow(
+        ConfigScreenState(
+            originalConfig = GlobalConfigHolder.config.value,
+            developmentWarningDialog = developmentWarningDialog,
+        )
     )
-	)
     val uiState = _uiState.asStateFlow()
 
     init {
@@ -39,7 +40,7 @@ class ConfigScreenModel : TouchControllerScreenModel() {
     }
 
     fun closeDevelopmentDialog() {
-	    developmentWarningDialog = false
+        developmentWarningDialog = false
         _uiState.getAndUpdate {
             it.copy(developmentWarningDialog = false)
         }
@@ -71,9 +72,8 @@ class ConfigScreenModel : TouchControllerScreenModel() {
     }
 
 
-	companion object{
-		@Volatile
-		@Suppress("SimplifyBooleanWithConstants", "KotlinConstantConditions")
-		var developmentWarningDialog = BuildInfo.MOD_STATE != "release"
-	}
+    companion object {
+        @Suppress("SimplifyBooleanWithConstants", "KotlinConstantConditions")
+        var developmentWarningDialog = BuildInfo.MOD_STATE != "release"
+    }
 }

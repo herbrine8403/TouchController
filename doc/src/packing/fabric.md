@@ -20,5 +20,4 @@ touchcontroller-fabric.jar
 └── ...
 ```
 
-通过每个版本特定的 JAR 都携带一个独立的 `fabric.mod.json`，声明了 `"depends": { "minecraft": "1.21.1" }` 等版本约束，我们就可以让
-给定的 JiJ 只在条件满足时才加载。
+通过每个版本特定的 JAR 都携带一个独立的 `fabric.mod.json`，声明了 `"depends": { "minecraft": "1.21.1" }` 等版本约束，我们就可以让给定的 JiJ 只在条件满足时才加载。
