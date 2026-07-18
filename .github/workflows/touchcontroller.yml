@@ -1,5 +1,19 @@
 name: Build TouchController
-on: [ pull_request, push ]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      max_retry_windows:
+        description: 'Build 最大重试次数（Windows）'
+        required: false
+        default: 10
+        type: number
+      max_retry_ubuntu:
+        description: 'Build 最大重试次数（Ubuntu）'
+        required: false
+        default: 10
+        type: number
 
 jobs:
   build:
@@ -37,8 +51,13 @@ jobs:
           authorization: ${{ secrets.BAZEL_CACHE_AUTH }}
           downloader_cfg: ${{ vars.BAZEL_DOWNLOADER_CONFIG }}
           netrc: ${{ secrets.BAZEL_NETRC }}
-      - name: Build
-        run: bazel build --verbose_failures --config=opt //touchcontroller //touchcontroller/fabric //touchcontroller/neoforge
+      - name: Build（ 多 试 几 次 ）
+        uses: nick-fields/retry@v3
+        with:
+          max_attempts: ${{ (github.event_name == 'workflow_dispatch' ? (matrix.os == 'windows-latest' ? inputs.max_retry_windows : inputs.max_retry_ubuntu) : 10) + 1 }}
+          timeout_minutes: 360
+          retry_on: error
+          command: bazel build --verbose_failures --config=opt //touchcontroller //touchcontroller/fabric //touchcontroller/neoforge
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
