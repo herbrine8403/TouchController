@@ -29,21 +29,26 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
       - name: Set up JDK 21
         uses: actions/setup-java@v5
         with:
           java-version: "21"
           distribution: "temurin"
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
+
       - uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
           ndk-version: r28b
+
       - name: Setup Bazel
         uses: bazel-contrib/setup-bazel@0.19.0
         with:
           repository-cache: MODULE.bazel.lock
+
       - name: Setup Remote Cache
         uses: ./.github/actions/setup-bazel-cache
         with:
@@ -51,13 +56,30 @@ jobs:
           authorization: ${{ secrets.BAZEL_CACHE_AUTH }}
           downloader_cfg: ${{ vars.BAZEL_DOWNLOADER_CONFIG }}
           netrc: ${{ secrets.BAZEL_NETRC }}
-      - name: Build（ 多 试 几 次 ）
+
+      - name: Determine max retry attempts
+        id: retry_config
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ matrix.os }}" = "windows-latest" ]; then
+              RETRY="${{ inputs.max_retry_windows }}"
+            else
+              RETRY="${{ inputs.max_retry_ubuntu }}"
+            fi
+          else
+            RETRY=10
+          fi
+          echo "max_attempts=$(( RETRY + 1 ))" >> $GITHUB_OUTPUT
+
+      - name: Build ( 多 试 几 次 )
         uses: nick-fields/retry@v3
         with:
-          max_attempts: ${{ (github.event_name == 'workflow_dispatch' ? (matrix.os == 'windows-latest' ? inputs.max_retry_windows : inputs.max_retry_ubuntu) : 10) + 1 }}
+          max_attempts: ${{ steps.retry_config.outputs.max_attempts }}
           timeout_minutes: 360
           retry_on: error
           command: bazel build --verbose_failures --config=opt //touchcontroller //touchcontroller/fabric //touchcontroller/neoforge
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
