@@ -1,11 +1,24 @@
 name: Build TouchController
-on: [ pull_request, push ]
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+    inputs:
+      retry_count:
+        description: '构建失败时的重试次数（默认 10）'
+        required: false
+        default: '10'
+        type: string
 
 jobs:
   build:
     runs-on: ${{ matrix.os }}
     env:
       MSYS_NO_PATHCONV: 1
+      # coursier 下载重试参数（fork 仓库无自建镜像，靠 coursier 自身重试）
+      COURSIER_RETRIES: 5
+      COURSIER_DOWNLOAD_TIMEOUT: 120
     strategy:
       fail-fast: false
       matrix:
@@ -35,11 +48,57 @@ jobs:
         with:
           host: ${{ vars.BAZEL_CACHE_HOST }}
           authorization: ${{ secrets.BAZEL_CACHE_AUTH }}
-          downloader_cfg: ${{ vars.BAZEL_DOWNLOADER_CONFIG }}
-          netrc: ${{ secrets.BAZEL_NETRC }}
-      - name: Build
-        run: bazel build --verbose_failures --config=opt //touchcontroller //touchcontroller/fabric //touchcontroller/neoforge
+      - name: Cache Maven/Coursier downloads
+        # 缓存 coursier 下载目录，让重试之间能复用已下载的文件
+        # 避免每次重试都从头下载所有 modmenu 版本
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/AppData/Local/coursier/cache
+          key: maven-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'maven_install.json', 'game/**/maven_install_fabric.json') }}
+          restore-keys: |
+            maven-${{ runner.os }}-
+      - name: Resolve retry count
+        # 手动触发时使用输入值，否则默认 10 次
+        shell: bash
+        run: |
+          RETRY_INPUT="${{ github.event.inputs.retry_count }}"
+          if [ -z "$RETRY_INPUT" ] || [ "$RETRY_INPUT" = "0" ]; then
+            RETRY_COUNT=10
+          else
+            RETRY_COUNT="$RETRY_INPUT"
+          fi
+          # 校验必须是正整数
+          if ! [[ "$RETRY_COUNT" =~ ^[0-9]+$ ]] || [ "$RETRY_COUNT" -lt 1 ]; then
+            echo "Invalid retry_count: $RETRY_COUNT, fallback to 10"
+            RETRY_COUNT=10
+          fi
+          echo "RETRY_COUNT=$RETRY_COUNT" >> "$GITHUB_ENV"
+          echo "Resolved retry count: $RETRY_COUNT"
+      - name: Build (with retry)
+        shell: bash
+        run: |
+          set +e
+          MAX_RETRIES=$RETRY_COUNT
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "=== Build attempt ${i}/${MAX_RETRIES} ==="
+            bazel build --verbose_failures --config=opt \
+              //touchcontroller //touchcontroller/fabric //touchcontroller/neoforge
+            EXIT_CODE=$?
+            if [ $EXIT_CODE -eq 0 ]; then
+              echo "Build succeeded on attempt ${i}"
+              exit 0
+            fi
+            echo "Build failed with exit code ${EXIT_CODE}"
+            if [ $i -lt $MAX_RETRIES ]; then
+              sleep 2
+            fi
+          done
+          echo "Build failed after ${MAX_RETRIES} attempts"
+          exit 1
       - name: Upload artifacts
+        if: success()
         uses: actions/upload-artifact@v7
         with:
           name: artifacts-${{ matrix.os }}
